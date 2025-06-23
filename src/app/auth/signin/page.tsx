@@ -23,6 +23,10 @@ export default async function SignInPage() {
 
         {/* Create System Admin Component - Comment out if not needed */}
         {/* <CreateSystemAdmin /> */}
+        <blockquote className="text-center flex flex-col mt-4 text-sm">
+          <span className="font-semibold">SysAdmin Credentials</span>
+          admin@gmail.com <br /> Admin@123
+        </blockquote>
       </div>
     </div>
   );

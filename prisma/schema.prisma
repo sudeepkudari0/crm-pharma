@@ -1,0 +1,314 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  email      String   @unique
+  name       String
+  role       UserRole @default(ASSOCIATE)
+  avatar     String?
+  phone      String?
+  territory  String?
+  firstLogin Boolean  @default(true)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  prospects     Prospect[]
+  activities    Activity[]
+  tasks         Task[]
+  assignedTasks Task[]     @relation("TaskAssignee")
+  Account       Account[]
+  Session       Session[]
+
+  adminAccess UserAdminAccess[] @relation("AdminToUsers")
+  userAccess  UserAdminAccess[] @relation("UserToAdmins")
+  AuditLog    AuditLog[]
+
+  @@map("users")
+}
+
+model UserAdminAccess {
+  id      String @id @default(auto()) @map("_id") @db.ObjectId
+  adminId String @db.ObjectId
+  userId  String @db.ObjectId
+
+  admin User @relation("AdminToUsers", fields: [adminId], references: [id], onDelete: Cascade)
+  user  User @relation("UserToAdmins", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([adminId, userId])
+  @@map("user_admin_access")
+}
+
+model Prospect {
+  id           String         @id @default(auto()) @map("_id") @db.ObjectId
+  prospectType ProspectType
+  name         String
+  email        String?
+  phone        String
+  company      String?
+  position     String?
+  address      String?
+  status       ProspectStatus @default(LEAD)
+  priority     Priority       @default(MEDIUM)
+  source       String?
+  notes        String?
+  lastContact  DateTime?
+  nextFollowUp DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  // Pharma-specific fields
+
+  orderOpportunity   OrderOpportunity   @default(NONE)
+  orderValue         Float?
+  doctorType         DoctorType?
+  specialization     String?
+  prescriptionVolume PrescriptionVolume @default(LOW)
+
+  // Relations
+  userId     String     @db.ObjectId
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activities Activity[]
+  tasks      Task[]
+
+  @@map("prospects")
+}
+
+model Activity {
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  type        ActivityType
+  subject     String
+  description String?
+  duration    Int?
+  outcome     String?
+  nextAction  String?
+  scheduledAt DateTime?
+  completedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  samplesProvided Json?
+  orderDiscussed  Boolean @default(false)
+  orderAmount     Float?
+
+  // Next Action
+  nextActionType         String?
+  nextActionDetails      String?
+  nextActionDate         DateTime?
+  nextActionReminderSent Boolean           @default(false)
+  nextActionStatus       NextActionStatus? @default(PENDING)
+  nextActionCompletedAt  DateTime?
+
+  // Relations
+  userId     String   @db.ObjectId
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prospectId String   @db.ObjectId
+  prospect   Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@map("activities")
+}
+
+model Task {
+  id          String     @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String?
+  type        TaskType   @default(TASK)
+  status      TaskStatus @default(PENDING)
+  priority    Priority   @default(MEDIUM)
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  createdById  String    @db.ObjectId
+  createdBy    User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  assignedToId String?   @db.ObjectId
+  assignedTo   User?     @relation("TaskAssignee", fields: [assignedToId], references: [id], onDelete: Cascade)
+  prospectId   String?   @db.ObjectId
+  prospect     Prospect? @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@map("tasks")
+}
+
+model Account {
+  id                String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String  @unique @db.ObjectId
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.String
+  access_token      String? @db.String
+  password          String?
+  salt              String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.String
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionToken String   @unique
+  userId       String   @db.ObjectId
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id           String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String?          @db.ObjectId
+  userName     String?
+  userRole     String?
+  action       AuditActionType
+  entityType   AuditEntityType?
+  entityId     String?          @db.ObjectId
+  targetUserId String?          @db.ObjectId
+  details      Json?
+  ipAddress    String?
+  userAgent    String?
+  timestamp    DateTime         @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+model OTP {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  phone     String?
+  email     String?
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+enum UserRole {
+  ASSOCIATE
+  ADMIN
+  SYS_ADMIN
+}
+
+enum ProspectStatus {
+  LEAD
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATION
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+enum ActivityType {
+  CALL
+  EMAIL
+  MEETING
+  WHATSAPP
+  VISIT
+  FOLLOW_UP
+  PRESENTATION
+  SAMPLE_DROP
+  ORDER_COLLECTION
+  OTHER
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum OrderOpportunity {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+  CONFIRMED
+}
+
+enum DoctorType {
+  GENERAL_PRACTITIONER
+  SPECIALIST
+  CONSULTANT
+  HOSPITAL_DOCTOR
+  CLINIC_DOCTOR
+  OTHER
+}
+
+enum PrescriptionVolume {
+  LOW
+  MEDIUM
+  HIGH
+  VERY_HIGH
+}
+
+enum ProspectType {
+  DOCTOR_CLINIC
+  DOCTOR_HOSPITAL
+  PHARMACY
+  DIAGNOSTIC_LAB
+  DISTRIBUTOR
+  RETAILOR
+  MEDICAL_COLLEGE
+  INDIVIDUAL_BUYES
+  OTHER
+}
+
+enum TaskType {
+  TASK
+  REQUEST
+}
+
+enum AuditActionType {
+  CREATE
+  VIEW
+  UPDATE
+  DELETE
+  LOGIN_SUCCESS
+  LOGIN_FAILURE
+  LOGOUT
+  PASSWORD_RESET_REQUEST
+  PASSWORD_RESET_SUCCESS
+  FAILED
+  PROSPECT_DISCOVERY_SEARCH
+}
+
+enum AuditEntityType {
+  PROSPECT
+  ACTIVITY
+  TASK
+  USER
+  SESSION
+  SYSTEM
+}
+
+enum NextActionStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+}
